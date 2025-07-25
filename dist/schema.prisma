@@ -1,0 +1,233 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  // CORREÇÃO: A linha 'output' foi removida. O Prisma agora usará o caminho padrão
+  // dentro de 'node_modules', o que resolve os problemas de importação.
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Perfil {
+  id_perfil        Int      @id @default(autoincrement())
+  nome_perfil      String   @unique @db.VarChar(100)
+  descricao_perfil String?
+
+  usuarios         UsuarioPerfil[]
+  funcionalidades  PerfilFuncionalidade[]
+
+  @@map("perfil")
+}
+
+model Funcionalidade {
+  id_funcionalidade        Int      @id @default(autoincrement())
+  nome_funcionalidade      String   @db.VarChar(100)
+  chave_funcionalidade     String   @unique @db.VarChar(50)
+  descricao_funcionalidade String?
+
+  perfis                   PerfilFuncionalidade[]
+
+  @@map("funcionalidade")
+}
+
+model SituacaoUsuario {
+  id_situacao_usuario            Int       @id @default(autoincrement())
+  descricao_situacao_usuario     String    @unique @db.VarChar(50)
+  ativa_situacao_usuario         Boolean?  @default(true)
+  data_cadastro_situacao_usuario DateTime? @default(now()) @db.Timestamp(6)
+
+  usuarios                       Usuario[]
+
+  @@map("situacao_usuario")
+}
+
+model CargoUsuario {
+  id_cargo_usuario            Int       @id @default(autoincrement())
+  descricao_cargo_usuario     String    @unique @db.VarChar(100)
+  ativa_cargo_usuario         Boolean?  @default(true)
+  data_cadastro_cargo_usuario DateTime? @default(now()) @db.Timestamp(6)
+
+  usuarios                    Usuario[]
+
+  @@map("cargo_usuario")
+}
+
+model SituacaoRequisicao {
+  id_situacao_requisicao          Int       @id @default(autoincrement())
+  descricao_situacao_requisicao   String    @unique @db.VarChar(100)
+  ativa_situacao_requisicao       Boolean?  @default(true)
+  data_cadastro_situacao_requisicao DateTime? @default(now()) @db.Timestamp(6)
+
+  requisicoes                     Requisicao[]
+
+  @@map("situacao_requisicao")
+}
+
+model TipoEnvioRequisicao {
+  id_tipo_envio_requisicao          Int       @id @default(autoincrement())
+  descricao_tipo_envio_requisicao   String    @unique @db.VarChar(100)
+  ativa_tipo_envio_requisicao       Boolean?  @default(true)
+  data_cadastro_tipo_envio_requisicao DateTime? @default(now()) @db.Timestamp(6)
+
+  requisicoes                       Requisicao[]
+
+  @@map("tipo_envio_requisicao")
+}
+
+model SituacaoEtapaOperacionalRequisicao {
+  id_situacao_etapa_operacional_requisicao          Int       @id @default(autoincrement())
+  descricao_situacao_etapa_operacional_requisicao   String    @unique @db.VarChar(100)
+  ativa_situacao_etapa_operacional_requisicao       Boolean?  @default(true)
+  data_cadastro_situacao_etapa_operacional_requisicao DateTime? @default(now()) @db.Timestamp(6)
+
+  etapas_requisicao                                 EtapaOperacionalRequisicao[]
+
+  @@map("situacao_etapa_operacional_requisicao")
+}
+
+model EtapaOperacional {
+  id_etapa_operacional        Int       @id @default(autoincrement())
+  descricao_etapa_operacional String    @unique @db.VarChar(100)
+  pre_etapa_operacional_id    Int?
+  pos_etapa_operacional_id    Int?
+  ativa_etapa_operacional     Boolean?  @default(true)
+  data_cadastro_etapa_operacional DateTime? @default(now()) @db.Timestamp(6)
+
+  pre_etapa                   EtapaOperacional?  @relation("FluxoPre", fields: [pre_etapa_operacional_id], references: [id_etapa_operacional], onDelete: NoAction, onUpdate: NoAction)
+  etapas_que_seguem_esta      EtapaOperacional[] @relation("FluxoPre")
+  pos_etapa                   EtapaOperacional?  @relation("FluxoPos", fields: [pos_etapa_operacional_id], references: [id_etapa_operacional], onDelete: NoAction, onUpdate: NoAction)
+  etapas_que_precedem_esta    EtapaOperacional[] @relation("FluxoPos")
+  
+  etapas_requisicao           EtapaOperacionalRequisicao[]
+
+  @@map("etapa_operacional")
+}
+
+// --- Tabelas Centrais ---
+
+model Usuario {
+  id_usuario            Int       @id @default(autoincrement())
+  nome_usuario          String    @db.VarChar(255)
+  email_usuario         String    @unique @db.VarChar(255)
+  cpf_usuario           String?   @unique @db.VarChar(14)
+  senha_hash            String    @db.VarChar(255)
+  id_situacao_usuario   Int
+  id_cargo_usuario      Int?
+  data_cadastro_usuario DateTime? @default(now()) @db.Timestamp(6)
+
+  situacao              SituacaoUsuario @relation(fields: [id_situacao_usuario], references: [id_situacao_usuario])
+  cargo                 CargoUsuario?   @relation(fields: [id_cargo_usuario], references: [id_cargo_usuario])
+  perfis                UsuarioPerfil[]
+  requisicoes           Requisicao[]
+  etapas_operacionais   EtapaOperacionalRequisicao[]
+  ocorrencias_registradas OcorrenciaEtapa[] // Relação inversa para OcorrenciaEtapa
+
+  @@map("usuario")
+}
+
+
+model Requisicao {
+  id_requisicao           Int      @id @default(autoincrement())
+  numero_requisicao       Int
+  requisitante_requisicao String?  @db.VarChar(255)
+  almoxarifado_requisicao String?  @db.VarChar(100)
+  id_usuario              Int
+  id_situacao_requisicao  Int
+  id_tipo_envio_requisicao Int?
+  
+  // ===== ALTERAÇÃO AQUI =====
+  // O tipo foi alterado de @db.Date para @db.Timestamp(6) para guardar data e hora.
+  data_requisicao         DateTime @default(now()) @db.Timestamp(6)
+  
+  prioridade_requisicao   Boolean? @default(false)
+  observacao_requisicao   String?
+  data_cadastro_requisicao DateTime? @default(now()) @db.Timestamp(6)
+
+  usuario                 Usuario            @relation(fields: [id_usuario], references: [id_usuario])
+  situacao                SituacaoRequisicao @relation(fields: [id_situacao_requisicao], references: [id_situacao_requisicao])
+  tipo_envio              TipoEnvioRequisicao? @relation(fields: [id_tipo_envio_requisicao], references: [id_tipo_envio_requisicao])
+  itens                   ItemRequisicao[]
+  etapas                  EtapaOperacionalRequisicao[]
+
+  @@map("requisicao")
+}
+
+// --- Tabelas de Ligação, Detalhes e Fluxo ---
+
+model UsuarioPerfil {
+  id_usuario Int
+  id_perfil  Int
+
+  usuario    Usuario @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade)
+  perfil     Perfil  @relation(fields: [id_perfil], references: [id_perfil], onDelete: Cascade)
+
+  @@id([id_usuario, id_perfil])
+  @@map("usuario_perfil")
+}
+
+model PerfilFuncionalidade {
+  id_perfil         Int
+  id_funcionalidade Int
+
+  perfil            Perfil       @relation(fields: [id_perfil], references: [id_perfil], onDelete: Cascade)
+  funcionalidade    Funcionalidade @relation(fields: [id_funcionalidade], references: [id_funcionalidade], onDelete: Cascade)
+
+  @@id([id_perfil, id_funcionalidade])
+  @@map("perfil_funcionalidade")
+}
+
+model ItemRequisicao {
+  id_item_requisicao               Int       @id @default(autoincrement())
+  id_requisicao                    Int
+  descricao_material_item_requisicao String?   @db.VarChar(255)
+  unidade_material_item_requisicao String?   @db.VarChar(20)
+  endereco_item_requisicao         String?   @db.VarChar(50)
+  quantidade_solicitada_item_requisicao Int
+  quantidade_atendida_item_requisicao Int?      @default(0)
+  data_cadastro_item_requisicao    DateTime? @default(now()) @db.Timestamp(6)
+
+  requisicao                       Requisicao @relation(fields: [id_requisicao], references: [id_requisicao], onDelete: Cascade)
+
+  @@map("item_requisicao")
+}
+
+model EtapaOperacionalRequisicao {
+  id_etapa_operacional_requisicao          Int      @id @default(autoincrement())
+  id_requisicao                            Int
+  id_etapa_operacional                     Int
+  id_usuario                               Int
+  id_situacao_etapa_operacional_requisicao Int
+  data_inicio_etapa_operacional_requisicao DateTime @default(now()) @db.Timestamp(6)
+  data_fim_etapa_operacional_requisicao    DateTime? @db.Timestamp(6)
+  data_cadastro_etapa_operacional_requisicao DateTime? @default(now()) @db.Timestamp(6)
+
+  requisicao                               Requisicao                         @relation(fields: [id_requisicao], references: [id_requisicao], onDelete: Cascade)
+  etapa_operacional                        EtapaOperacional                   @relation(fields: [id_etapa_operacional], references: [id_etapa_operacional])
+  usuario                                  Usuario                            @relation(fields: [id_usuario], references: [id_usuario])
+  situacao_etapa                           SituacaoEtapaOperacionalRequisicao @relation(fields: [id_situacao_etapa_operacional_requisicao], references: [id_situacao_etapa_operacional_requisicao])
+  
+  ocorrencias                              OcorrenciaEtapa[]
+
+  @@map("etapa_operacional_requisicao")
+}
+
+model OcorrenciaEtapa {
+  id_ocorrencia_etapa      Int       @id @default(autoincrement())
+  id_etapa_requisicao      Int
+  id_usuario_registro      Int
+  descricao_ocorrencia     String
+  solucao_ocorrencia       String?
+  status_ocorrencia        String?   @default("Pendente") @db.VarChar(50)
+  data_cadastro_ocorrencia DateTime? @default(now()) @db.Timestamp(6)
+  data_solucao_ocorrencia  DateTime? @db.Timestamp(6)
+
+  etapa_requisicao         EtapaOperacionalRequisicao @relation(fields: [id_etapa_requisicao], references: [id_etapa_operacional_requisicao])
+  // CORREÇÃO: A relação com o usuário que registrou a ocorrência foi adicionada.
+  usuario_registro         Usuario                    @relation(fields: [id_usuario_registro], references: [id_usuario])
+  
+  @@map("ocorrencia_etapa")
+}
