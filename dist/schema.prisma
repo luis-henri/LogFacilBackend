@@ -152,9 +152,26 @@ model Requisicao {
   tipo_envio              TipoEnvioRequisicao? @relation(fields: [id_tipo_envio_requisicao], references: [id_tipo_envio_requisicao])
   itens                   ItemRequisicao[]
   etapas                  EtapaOperacionalRequisicao[]
+  volumes                 Volume[]
 
   @@map("requisicao")
 }
+
+// NOVO MODEL
+model Volume {
+  id_volume      Int     @id @default(autoincrement())
+  id_requisicao  Int
+  comprimento    Float?
+  largura        Float?
+  altura         Float?
+  peso           Float?
+  
+  // A relação agora está completa
+  requisicao     Requisicao @relation(fields: [id_requisicao], references: [id_requisicao], onDelete: Cascade)
+
+  @@map("volume")
+}
+
 
 // --- Tabelas de Ligação, Detalhes e Fluxo ---
 

@@ -54,7 +54,9 @@ const login = async (req, res) => {
         if (!process.env.JWT_SECRET) {
             throw new Error('O segredo JWT não está definido.');
         }
-        const token = jsonwebtoken_1.default.sign({ userId: user.id_usuario }, process.env.JWT_SECRET, { expiresIn: '8h' });
+        // LINHA ADICIONADA PARA DEPURAÇÃO
+        console.log('[AUTH CONTROLLER] Segredo usado para criar o token:', process.env.JWT_SECRET);
+        const token = jsonwebtoken_1.default.sign({ userId: user.id_usuario, nome: user.nome_usuario }, process.env.JWT_SECRET, { expiresIn: '8h' });
         res.json({
             message: "Login bem-sucedido!",
             token,
