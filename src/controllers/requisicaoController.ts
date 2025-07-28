@@ -188,7 +188,7 @@ export const getMonitoramentoRequisicoes = async (req: Request, res: Response): 
                 tipo_envio: true, 
                 itens: true
             },
-            orderBy: { data_cadastro_requisicao: 'desc' }
+            orderBy: { data_cadastro_requisicao: 'asc' }
         });
         res.json(requisicoes);
     } catch (error) {
