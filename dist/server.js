@@ -8,6 +8,7 @@ const cors_1 = __importDefault(require("cors"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const requisicaoRoutes_1 = __importDefault(require("./routes/requisicaoRoutes"));
+const userRoutes_1 = __importDefault(require("./routes/userRoutes"));
 const authMiddleware_1 = require("./middleware/authMiddleware");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -33,6 +34,7 @@ app.get('/', (req, res) => {
 // Rotas da API
 app.use('/api/auth', authRoutes_1.default);
 app.use('/api/requisicoes', authMiddleware_1.protect, requisicaoRoutes_1.default);
+app.use('/api/usuarios', authMiddleware_1.protect, userRoutes_1.default);
 app.listen(port, () => {
     console.log(`Backend a correr em http://localhost:${port}`);
 });

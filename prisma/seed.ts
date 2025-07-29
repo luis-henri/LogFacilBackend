@@ -62,7 +62,6 @@ async function main() {
     console.log(`Seeding concluído.`);
 }
 
-
 main()
     .catch((e) => {
         console.error(e);
