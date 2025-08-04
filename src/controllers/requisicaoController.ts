@@ -149,11 +149,15 @@ export const getRequisicoesPorStatus = async (req: Request, res: Response): Prom
             'pendente': 1,
             'em-atendimento': 2,
             'em-separacao': 3,
-            'em-conferencia': 4,
+            'em-conferencia-separacao': 4,
             'em-embalagem': 5,
-            'em-expedicao': 6,
+            'em-conferencia-expedicao': 6,
             'concluida': 7,
-            'cancelada': 8
+            'cancelada': 8,
+            'enviado-para-separacao': 9,
+            'enviado-para-conferencia-separacao': 10,
+            'enviado-para-embalagem': 11,
+            'enviado-para-conferencia-expedicao': 12
         };
         const statusId = statusMap[status.toLowerCase()];
 
@@ -214,8 +218,10 @@ export const updateRequisicao = async (req: Request, res: Response): Promise<voi
         if (status) {
             const statusMap: { [key: string]: number } = {
                 'pendente': 1, 'em-atendimento': 2, 'em-separacao': 3,
-                'em-conferencia': 4, 'em-embalagem': 5, 'em-expedicao': 6,
-                'concluida': 7, 'cancelada': 8
+                'em-conferencia-separacao': 4, 'em-embalagem': 5, 'em-conferencia-expedicao': 6,
+                'concluida': 7, 'cancelada': 8, 'enviado-para-separacao': 9, 
+                'enviado-para-conferencia-separacao': 10, 'enviado-para-embalagem': 11,
+                'enviado-para-conferencia-expedicao': 12
             };
             const statusId = statusMap[status.toLowerCase()];
             if (!statusId) {

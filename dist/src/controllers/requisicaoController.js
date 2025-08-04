@@ -135,11 +135,15 @@ const getRequisicoesPorStatus = async (req, res) => {
             'pendente': 1,
             'em-atendimento': 2,
             'em-separacao': 3,
-            'em-conferencia': 4,
+            'em-conferencia-separacao': 4,
             'em-embalagem': 5,
-            'em-expedicao': 6,
+            'em-conferencia-expedicao': 6,
             'concluida': 7,
-            'cancelada': 8
+            'cancelada': 8,
+            'enviado-para-separacao': 9,
+            'enviado-para-conferencia-separacao': 10,
+            'enviado-para-embalagem': 11,
+            'enviado-para-conferencia-expedicao': 12
         };
         const statusId = statusMap[status.toLowerCase()];
         if (!statusId) {
@@ -173,7 +177,7 @@ const getMonitoramentoRequisicoes = async (req, res) => {
                 tipo_envio: true,
                 itens: true
             },
-            orderBy: { data_cadastro_requisicao: 'desc' }
+            orderBy: { data_cadastro_requisicao: 'asc' }
         });
         res.json(requisicoes);
     }
@@ -198,8 +202,10 @@ const updateRequisicao = async (req, res) => {
         if (status) {
             const statusMap = {
                 'pendente': 1, 'em-atendimento': 2, 'em-separacao': 3,
-                'em-conferencia': 4, 'em-embalagem': 5, 'em-expedicao': 6,
-                'concluida': 7, 'cancelada': 8
+                'em-conferencia-separacao': 4, 'em-embalagem': 5, 'em-conferencia-expedicao': 6,
+                'concluida': 7, 'cancelada': 8, 'enviado-para-separacao': 9,
+                'enviado-para-conferencia-separacao': 10, 'enviado-para-embalagem': 11,
+                'enviado-para-conferencia-expedicao': 12
             };
             const statusId = statusMap[status.toLowerCase()];
             if (!statusId) {
