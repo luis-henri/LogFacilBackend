@@ -38,7 +38,7 @@ async function main() {
         where: { email_usuario: 'admin@logfacil.com' },
         update: {},
         create: {
-            nome_usuario: 'Administrador Padrão',
+            nome_usuario: 'Administrador',
             email_usuario: 'admin@logfacil.com',
             cpf_usuario: '00000000000', // CPF padrão
             senha_hash: hashedPassword,
