@@ -1,6 +1,6 @@
 "use strict";
 // ARQUIVO: prisma/seed.ts
-// VERSÃO COMPLETA E CORRIGIDA
+// VERSÃO MODIFICADA PARA ATRIBUIR PERFIL A UM UTILIZADOR EXISTENTE
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -10,7 +10,7 @@ const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const prisma = new client_1.PrismaClient();
 async function main() {
     console.log(`A iniciar o processo de seeding...`);
-    // 1. Criar Status de Utilizador (como já estava)
+    // 1. Garante que os Status e Perfis básicos existem
     await prisma.situacaoUsuario.createMany({
         data: [
             { id_situacao_usuario: 1, descricao_situacao_usuario: 'Ativo' },
@@ -18,8 +18,7 @@ async function main() {
         ],
         skipDuplicates: true,
     });
-    console.log('Status de utilizador criados.');
-    // 2. Criar Perfis de Utilizador
+    console.log('Status de utilizador verificados.');
     await prisma.perfil.createMany({
         data: [
             { id_perfil: 1, nome_perfil: 'Administrador - Geral' },
@@ -31,42 +30,57 @@ async function main() {
         ],
         skipDuplicates: true,
     });
-    console.log('Perfis de utilizador criados.');
-    // 3. Criar o primeiro Utilizador Administrador
-    const hashedPassword = await bcryptjs_1.default.hash('admin123', 10); // Senha padrão: admin123
-    const adminUser = await prisma.usuario.upsert({
-        where: { email_usuario: 'admin@logfacil.com' },
-        update: {},
-        create: {
-            nome_usuario: 'Administrador',
-            email_usuario: 'admin@logfacil.com',
-            cpf_usuario: '00000000000', // CPF padrão
-            senha_hash: hashedPassword,
-            id_situacao_usuario: 1, // Ativo
-        },
+    console.log('Perfis de utilizador verificados.');
+    // =======================================================================
+    // PASSO CRÍTICO: Definir qual utilizador será o administrador
+    // =======================================================================
+    const cpfDoAdmin = '00000000000'; // <-- SUBSTITUA PELO CPF DO SEU UTILIZADOR
+    const senhaTemporariaAdmin = 'admin123'; // <-- SENHA QUE VOCÊ USARÁ PARA LOGAR
+    console.log(`A procurar o utilizador com CPF: ${cpfDoAdmin} para o tornar administrador...`);
+    // 2. Encontra o seu utilizador existente pelo CPF
+    const userToMakeAdmin = await prisma.usuario.findUnique({
+        where: { cpf_usuario: cpfDoAdmin },
     });
-    console.log('Utilizador administrador criado/verificado.');
-    // 4. Associar o Utilizador Administrador ao Perfil de Administrador
-    // Busca o perfil que acabámos de criar
-    const adminProfile = await prisma.perfil.findUnique({ where: { id_perfil: 1 } });
-    if (adminUser && adminProfile) {
-        await prisma.usuarioPerfil.upsert({
-            where: {
-                // A chave primária composta é identificada assim pelo Prisma
-                id_usuario_id_perfil: {
-                    id_usuario: adminUser.id_usuario,
+    // 3. Se o utilizador for encontrado, atualiza-o e associa o perfil
+    if (userToMakeAdmin) {
+        console.log(`Utilizador "${userToMakeAdmin.nome_usuario}" encontrado.`);
+        // 3a. Atualiza a senha para um valor conhecido e garante que está ativo
+        const hashedPassword = await bcryptjs_1.default.hash(senhaTemporariaAdmin, 10);
+        await prisma.usuario.update({
+            where: { id_usuario: userToMakeAdmin.id_usuario },
+            data: {
+                senha_hash: hashedPassword,
+                id_situacao_usuario: 1 // Garante que o utilizador está ativo
+            },
+        });
+        console.log(`Senha do utilizador atualizada para um valor temporário conhecido.`);
+        // 3b. Encontra o perfil de Administrador
+        const adminProfile = await prisma.perfil.findUnique({ where: { id_perfil: 1 } });
+        if (adminProfile) {
+            // 3c. Associa o utilizador ao perfil de Administrador (cria ou atualiza a ligação)
+            await prisma.usuarioPerfil.upsert({
+                where: {
+                    id_usuario_id_perfil: {
+                        id_usuario: userToMakeAdmin.id_usuario,
+                        id_perfil: adminProfile.id_perfil,
+                    }
+                },
+                update: {}, // Não faz nada se a associação já existir
+                create: {
+                    id_usuario: userToMakeAdmin.id_usuario,
                     id_perfil: adminProfile.id_perfil,
                 }
-            },
-            update: {},
-            create: {
-                id_usuario: adminUser.id_usuario,
-                id_perfil: adminProfile.id_perfil,
-            }
-        });
-        console.log('Associação entre utilizador Admin e perfil Admin criada.');
+            });
+            console.log(`Utilizador "${userToMakeAdmin.nome_usuario}" associado com sucesso ao perfil "${adminProfile.nome_perfil}".`);
+        }
+        else {
+            console.error('ERRO CRÍTICO: O perfil "Administrador - Geral" com id=1 não foi encontrado.');
+        }
     }
-    // Adicione aqui a criação de outros dados iniciais se necessário (SituaçãoRequisição, etc.)
+    else {
+        console.error(`ERRO: Nenhum utilizador encontrado com o CPF ${cpfDoAdmin}. Por favor, verifique o CPF no ficheiro seed.ts.`);
+        console.error('O script não irá criar um novo utilizador. Ele apenas modifica um existente.');
+    }
     console.log(`Seeding concluído.`);
 }
 main()
