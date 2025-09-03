@@ -1,59 +1,68 @@
-LogFacil - Backend
-Este é o projeto de backend para a aplicação LogFácil, construído com Node.js, Express, TypeScript e Prisma.
+LogFácil - Backend (Node.js + Express + TypeScript)
 
-Configuração Recomendada do IDE
-VSCode
+Stack e dependências
 
-1. ESLint
+- Express, TypeScript, ts-node-dev
+- Prisma ORM (+ @prisma/client) e PostgreSQL
+- JWT (jsonwebtoken), bcryptjs
+- Multer (upload em memória), CORS, dotenv
 
-2. Prettier - Code formatter
+Setup
 
-3. Prisma
-
-Configuração do Projeto
-Siga os passos abaixo para configurar e executar o projeto localmente.
-
-1. Instalar Dependências
-Este comando irá instalar todas as bibliotecas necessárias listadas no package.json.
-
+```
 npm install
+```
 
-2. Configurar Variáveis de Ambiente
-O projeto requer um ficheiro .env na raiz para guardar informações sensíveis.
+Variáveis de ambiente (`.env`)
 
-Crie um ficheiro chamado .env na raiz da pasta logfacil-backend.
+```
+DATABASE_URL="postgresql://SEU_USUARIO:SUA_SENHA@localhost:5432/SEU_BANCO"
+JWT_SECRET="SEGREDO_SUPER_SEGURO"
+PORT=3000
+```
 
-Adicione as seguintes variáveis, substituindo pelos seus valores:
+Migrações e Prisma
 
-# String de ligação ao seu banco de dados PostgreSQL
-DATABASE_URL="postgresql://SEU_USUARIO:SUA_SENHA@localhost:5432/SEU_BANCO_DE_DADOS"
-
-# Segredo para assinar os tokens JWT. Use um texto longo e aleatório.
-JWT_SECRET="SEU_SEGREDO_SUPER_SECRETO_AQUI"
-
-3. Configurar e Migrar o Banco de Dados
-Este comando lê o seu prisma/schema.prisma e cria/atualiza as tabelas no seu banco de dados PostgreSQL.
-
+```
 npx prisma migrate dev
+npx prisma generate
+```
 
-Nota para Redes Corporativas: Se encontrar um erro de self-signed certificate, execute o comando com o seguinte prefixo:
+Scripts
 
-NODE_TLS_REJECT_UNAUTHORIZED=0 npx prisma migrate dev
+```
+npm run dev            # desenvolvimento com hot reload
+npm run build          # gera dist/
+npm start              # executa dist/server.js
+npm run user:create    # cria usuário via script (ts)
+npm run import:data    # importa requisições via script (ts)
+```
 
-Comandos Disponíveis
-Compilar e Iniciar para Desenvolvimento (com Hot-Reload)
-Este comando inicia o servidor em modo de desenvolvimento. Ele irá reiniciar automaticamente sempre que você alterar um ficheiro no código-fonte (src/).
+Rotas (API)
 
-npm run dev
+- Auth: `POST /api/auth/login`, `POST /api/auth/register`
+- Requisições (protegid as por JWT):
+  - `GET /api/requisicoes` (lista)
+  - `GET /api/requisicoes/:id` (detalhe)
+  - `GET /api/requisicoes/status/:status`
+  - `GET /api/requisicoes/monitoramento`
+  - `GET /api/requisicoes/tipos-envio`
+  - `POST /api/requisicoes/importar` (upload TXT - `file`)
+  - `PATCH /api/requisicoes/:id`
+  - `PATCH /api/requisicoes/:id/prioridade`
+- Usuários (protegidas por JWT): `GET /api/usuarios`, `PATCH /api/usuarios/:id`, `GET /api/usuarios/perfis`
 
-O servidor estará disponível em http://localhost:3000.
+Segurança
 
-Compilar para Produção
-Este comando compila o seu código TypeScript para JavaScript puro, pronto para ser executado num servidor de produção. Os ficheiros compilados serão guardados numa nova pasta chamada dist.
+- `protect` valida `Authorization: Bearer <JWT>` e popula `req.user`
+- `checkPerfil([..])` aplica RBAC por rota
+- CORS restrito a origens configuradas em `src/server.ts`
+- Hash de senhas com `bcryptjs`
 
-npm run build
+Modelagem de Dados
 
-Iniciar em Modo de Produção
-Este comando executa o código já compilado a partir da pasta dist. Use-o depois de executar o npm run build.
+- Ver `prisma/schema.prisma` para os modelos: `Usuario`, `Perfil`, `UsuarioPerfil`, `Funcionalidade`, `Requisicao`, `ItemRequisicao`, `Volume`, `EtapaOperacional*`, `OcorrenciaEtapa`, `TipoEnvioRequisicao`, etc.
 
-npm run start
+Observabilidade
+
+- Logger simples de requests em `src/server.ts` (útil em dev)
