@@ -60,7 +60,8 @@ async function importar() {
       const matchRequisitante = linha.match(/^Requisitantes:;([^;]+)/);
       const matchRequisicaoNum = linha.match(/^Requisição:;(\d+)/);
       const matchDataHora = linha.match(/^;;;Tribunal Regional Eleitoral de Pernambuco- TRE\/PE;;;;;;([\d\/]+\s[\d:]+)/);
-      const matchAlmoxarifado = linha.match(/^Almoxarifado:;([^;]+)/);
+  // Regex mais flexível: aceita espaços, variações de maiúsculas e possíveis ; antes
+      const matchAlmoxarifado = linha.match(/(?:^|;)\s*Almoxarifado\s*:??\s*;+\s*([^;]+)/i);
       const matchItem = linha.match(/^(\d+);;(\d+);;([A-Z]{2,3});(.*?);/);
 
       if (matchRequisitante) {
@@ -71,8 +72,11 @@ async function importar() {
         }
         requisicaoAtual = { requisitante_requisicao: matchRequisitante[1].trim(), itens: [] };
       } else if (matchAlmoxarifado && requisicaoAtual) {
-        // captura o nome do almoxarifado na linha
-        requisicaoAtual.almoxarifado_requisicao = matchAlmoxarifado[1].trim();
+        // captura o nome do almoxarifado na linha, normaliza espaços
+        const raw = matchAlmoxarifado[1].trim();
+        const normalized = raw.replace(/\s+/g, ' ');
+        requisicaoAtual.almoxarifado_requisicao = normalized;
+        console.log(`Almoxarifado capturado: "${normalized}"`);
       } else if (matchRequisicaoNum && requisicaoAtual) {
         requisicaoAtual.numero_requisicao = parseInt(matchRequisicaoNum[1], 10);
       } else if (matchDataHora && requisicaoAtual) {
