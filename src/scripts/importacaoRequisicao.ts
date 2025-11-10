@@ -8,6 +8,7 @@ const prisma = new PrismaClient();
 interface ParsedRequisicao {
   numero_requisicao: number;
   requisitante_requisicao: string;
+  almoxarifado_requisicao?: string;
   data_requisicao: Date;
   itens: {
     quantidade_solicitada_item_requisicao: number;
@@ -59,6 +60,7 @@ async function importar() {
       const matchRequisitante = linha.match(/^Requisitantes:;([^;]+)/);
       const matchRequisicaoNum = linha.match(/^Requisição:;(\d+)/);
       const matchDataHora = linha.match(/^;;;Tribunal Regional Eleitoral de Pernambuco- TRE\/PE;;;;;;([\d\/]+\s[\d:]+)/);
+      const matchAlmoxarifado = linha.match(/^Almoxarifado:;([^;]+)/);
       const matchItem = linha.match(/^(\d+);;(\d+);;([A-Z]{2,3});(.*?);/);
 
       if (matchRequisitante) {
@@ -68,6 +70,9 @@ async function importar() {
           requisicoesProcessadas.push(requisicaoAtual as ParsedRequisicao);
         }
         requisicaoAtual = { requisitante_requisicao: matchRequisitante[1].trim(), itens: [] };
+      } else if (matchAlmoxarifado && requisicaoAtual) {
+        // captura o nome do almoxarifado na linha
+        requisicaoAtual.almoxarifado_requisicao = matchAlmoxarifado[1].trim();
       } else if (matchRequisicaoNum && requisicaoAtual) {
         requisicaoAtual.numero_requisicao = parseInt(matchRequisicaoNum[1], 10);
       } else if (matchDataHora && requisicaoAtual) {
@@ -94,6 +99,7 @@ async function importar() {
         data: {
           numero_requisicao: req.numero_requisicao,
           requisitante_requisicao: req.requisitante_requisicao,
+          almoxarifado_requisicao: req.almoxarifado_requisicao || undefined,
           data_requisicao: req.data_requisicao,
           id_usuario: 23,
           id_situacao_requisicao: 1,
