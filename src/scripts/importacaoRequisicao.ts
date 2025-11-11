@@ -60,8 +60,9 @@ async function importar() {
       const matchRequisitante = linha.match(/^Requisitantes:;([^;]+)/);
       const matchRequisicaoNum = linha.match(/^Requisição:;(\d+)/);
       const matchDataHora = linha.match(/^;;;Tribunal Regional Eleitoral de Pernambuco- TRE\/PE;;;;;;([\d\/]+\s[\d:]+)/);
-  // Regex mais flexível: aceita espaços, variações de maiúsculas e possíveis ; antes
-      const matchAlmoxarifado = linha.match(/(?:^|;)\s*Almoxarifado\s*:??\s*;+\s*([^;]+)/i);
+  // Regex simplificada e confiável para capturar "Almoxarifado:;VALOR" em várias formas
+  // aceita início de linha ou ponto-e-vírgula antes, espaços e ':' ou ';' como separador
+      const matchAlmoxarifado = linha.match(/(?:^|;)\s*almoxarifado\s*[:;]\s*([^;]+)/i);
       const matchItem = linha.match(/^(\d+);;(\d+);;([A-Z]{2,3});(.*?);/);
 
       if (matchRequisitante) {
@@ -89,6 +90,15 @@ async function importar() {
           console.log(`Almoxarifado capturado (fallback): "${normalizedFallback}" -- linha: "${linha.trim()}"`);
         } else {
           console.log(`Encontrada palavra 'almoxarifado' mas não foi possível extrair valor automaticamente; linha: "${linha.trim()}"`);
+          // adicional: tenta um segundo fallback simples: pega tudo após o primeiro ':' ou ';'
+          const m2 = linha.match(/[:;]\s*(.+)$/);
+          if (m2 && m2[1]) {
+            const try2 = m2[1].split(';')[0].trim().replace(/\s+/g, ' ');
+            if (try2.length > 0) {
+              requisicaoAtual.almoxarifado_requisicao = try2;
+              console.log(`Almoxarifado capturado (fallback2): "${try2}" -- linha: "${linha.trim()}"`);
+            }
+          }
         }
       } else if (matchRequisicaoNum && requisicaoAtual) {
         requisicaoAtual.numero_requisicao = parseInt(matchRequisicaoNum[1], 10);
@@ -109,8 +119,28 @@ async function importar() {
 
     console.log(`Processamento concluído. ${requisicoesProcessadas.length} requisições encontradas para inserir.`);
 
-    // Agora, insere cada requisição processada no banco de dados
-    for (const req of requisicoesProcessadas) {
+    // Antes de inserir, verifique quais requisições já existem no banco
+    const numeros = requisicoesProcessadas
+      .map(r => r.numero_requisicao)
+      .filter((n): n is number => typeof n === 'number');
+
+    const existentes = await prisma.requisicao.findMany({
+      where: { numero_requisicao: { in: numeros } },
+      select: { numero_requisicao: true },
+    });
+
+    const existentesSet = new Set(existentes.map(e => e.numero_requisicao));
+    const novos = requisicoesProcessadas.filter(r => !existentesSet.has(r.numero_requisicao));
+
+    console.log(`${existentes.length} requisições já existentes encontradas no banco.`);
+    console.log(`${novos.length} requisições novas serão importadas.`);
+
+    if (novos.length === 0) {
+      console.log('Nenhuma nova requisição para importar. Operação finalizada.');
+    }
+
+    // Insere apenas as requisições não existentes
+    for (const req of novos) {
       console.log(`A inserir requisição nº: ${req.numero_requisicao} com ${req.itens.length} itens.`);
       await prisma.requisicao.create({
         data: {
