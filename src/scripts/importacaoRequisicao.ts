@@ -76,7 +76,20 @@ async function importar() {
         const raw = matchAlmoxarifado[1].trim();
         const normalized = raw.replace(/\s+/g, ' ');
         requisicaoAtual.almoxarifado_requisicao = normalized;
-        console.log(`Almoxarifado capturado: "${normalized}"`);
+        console.log(`Almoxarifado capturado (regex): "${normalized}"`);
+      } else if (linha.toLowerCase().includes('almoxarifado') && requisicaoAtual && !requisicaoAtual.almoxarifado_requisicao) {
+        // Fallback: tenta extrair o valor dividindo por ';' e pegando o token após o rótulo
+        const parts = linha.split(';').map(p => p.trim()).filter(p => p.length > 0);
+        // procura o índice do token que contém 'almoxarifado'
+        const idx = parts.findIndex(p => p.toLowerCase().includes('almoxarifado'));
+        if (idx >= 0 && parts.length > idx + 1) {
+          const rawFallback = parts[idx + 1];
+          const normalizedFallback = rawFallback.replace(/\s+/g, ' ');
+          requisicaoAtual.almoxarifado_requisicao = normalizedFallback;
+          console.log(`Almoxarifado capturado (fallback): "${normalizedFallback}" -- linha: "${linha.trim()}"`);
+        } else {
+          console.log(`Encontrada palavra 'almoxarifado' mas não foi possível extrair valor automaticamente; linha: "${linha.trim()}"`);
+        }
       } else if (matchRequisicaoNum && requisicaoAtual) {
         requisicaoAtual.numero_requisicao = parseInt(matchRequisicaoNum[1], 10);
       } else if (matchDataHora && requisicaoAtual) {
