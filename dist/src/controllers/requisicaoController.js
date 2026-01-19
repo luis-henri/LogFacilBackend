@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.togglePrioridade = exports.getTiposEnvio = exports.updateRequisicao = exports.getMonitoramentoRequisicoes = exports.getRequisicoesPorStatus = exports.getRequisicaoById = exports.getAllRequisicoes = exports.importFromTxt = void 0;
 const prisma_1 = require("../lib/prisma");
+const sync_1 = require("csv-parse/sync");
 // Função auxiliar para converter data no formato DD/MM/AAAA HH:mm:ss para um objeto Date
 function parseDate(dateString) {
     try {
@@ -10,7 +11,10 @@ function parseDate(dateString) {
         if (isNaN(parseInt(day)) || isNaN(parseInt(month)) || isNaN(parseInt(year))) {
             return null;
         }
-        return new Date(`${year}-${month}-${day}T${timePart}`);
+        const date = new Date(`${year}-${month}-${day}T${timePart}`);
+        // Ajusta para timezone de São Paulo (UTC-3)
+        date.setHours(date.getHours() - 3);
+        return date;
     }
     catch (e) {
         console.warn(`Formato de data inválido encontrado: ${dateString}`);
@@ -27,47 +31,157 @@ const importFromTxt = async (req, res) => {
     }
     // @ts-ignore - Pega o ID do usuário do token (adicionado pelo middleware 'protect')
     const userId = req.user?.userId || 23; // Usar 23 como fallback caso não encontre
+    const situacaoQuery = req.query.situacao;
+    const idSituacao = situacaoQuery ? parseInt(situacaoQuery, 10) : 1;
     try {
         const conteudoFicheiro = req.file.buffer.toString('utf-8');
-        const linhas = conteudoFicheiro.split(/\r?\n/);
+        // Usar csv-parse para dividir em colunas por ';'
+        const records = (0, sync_1.parse)(conteudoFicheiro, {
+            delimiter: ';',
+            relax_column_count: true,
+            skip_empty_lines: true,
+            trim: false,
+        });
         const requisicoesProcessadas = [];
-        let requisicaoAtual = {};
-        for (const linha of linhas) {
-            const matchRequisitante = linha.match(/^Requisitantes:;([^;]+)/);
-            const matchRequisicaoNum = linha.match(/^Requisição:;(\d+)/);
-            const matchDataHora = linha.match(/^;;;Tribunal Regional Eleitoral de Pernambuco- TRE\/PE;;;;;;([\d\/]+\s[\d:]+)/);
-            const matchItem = linha.match(/^(\d+);;(\d+);;([A-Z]{2,3});(.*?);/);
-            if (matchRequisitante) {
-                if (requisicaoAtual.numero_requisicao) {
-                    requisicoesProcessadas.push(requisicaoAtual);
-                }
-                requisicaoAtual = { requisitante_requisicao: matchRequisitante[1].trim(), itens: [] };
-            }
-            else if (matchRequisicaoNum && requisicaoAtual) {
-                requisicaoAtual.numero_requisicao = parseInt(matchRequisicaoNum[1], 10);
-            }
-            else if (matchDataHora && requisicaoAtual) {
-                requisicaoAtual.data_requisicao = parseDate(matchDataHora[1].trim()) ?? new Date();
-            }
-            else if (matchItem && requisicaoAtual.itens) {
-                requisicaoAtual.itens.push({
-                    endereco_item_requisicao: matchItem[1],
-                    quantidade_solicitada_item_requisicao: parseInt(matchItem[2], 10),
-                    unidade_material_item_requisicao: matchItem[3],
-                    descricao_material_item_requisicao: matchItem[4].trim(),
-                });
+        let requisicaoAtual = { itens: [] };
+        // Captura a data global do arquivo (primeira ocorrência com hora completa)
+        let dataGlobalArquivo = null;
+        for (const r of records) {
+            const rowStr = r.join(';');
+            const dateMatch = rowStr.match(/(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2})/);
+            if (dateMatch && dateMatch[1]) {
+                dataGlobalArquivo = parseDate(dateMatch[1].trim());
+                console.log(`[DEBUG] Data global do arquivo capturada: ${dataGlobalArquivo}`);
+                break;
             }
         }
-        if (requisicaoAtual.numero_requisicao) {
+        if (!dataGlobalArquivo) {
+            dataGlobalArquivo = new Date(); // Fallback se não encontrar
+        }
+        function compactRow(row) {
+            return row.map(c => (c ?? '').toString()).map(s => s.trim()).filter(s => s.length > 0);
+        }
+        function tryParseItemFromRow(row) {
+            const compact = compactRow(row);
+            if (compact.length < 3)
+                return null;
+            const maybeQuantidade = compact[1];
+            const maybeUnidade = compact[2];
+            const descricao = compact.slice(3).join(' ');
+            if (/^\d+$/.test(compact[0]) && /^\d+$/.test(maybeQuantidade) && /^[A-Z]{1,6}$/i.test(maybeUnidade)) {
+                return { endereco: compact[0], quantidade: parseInt(maybeQuantidade, 10), unidade: maybeUnidade, descricao };
+            }
+            return null;
+        }
+        for (const row of records) {
+            const compact = compactRow(row);
+            if (compact.length === 0)
+                continue;
+            const rowStr = row.join(';');
+            // Requisitante
+            const reqIdx = compact.findIndex(c => /requisitan(te|tes)?/i.test(c));
+            if (reqIdx >= 0) {
+                if (requisicaoAtual.numero_requisicao) {
+                    console.log(`[DEBUG] Requisição anterior salva: #${requisicaoAtual.numero_requisicao}, Almoxarifado: "${requisicaoAtual.almoxarifado_requisicao}"`);
+                    requisicoesProcessadas.push(requisicaoAtual);
+                    requisicaoAtual = { itens: [] };
+                }
+                const nome = compact[reqIdx + 1] ?? compact.slice(reqIdx + 1).join(' ');
+                requisicaoAtual.requisitante_requisicao = nome;
+                console.log(`[DEBUG] Requisitante capturado: "${nome}"`);
+                continue;
+            }
+            // Almoxarifado
+            const almIdx = compact.findIndex(c => /almoxarifado/i.test(c));
+            if (almIdx >= 0) {
+                // Regex mais preciso: procura "Almoxarifado:" seguido de ";", depois captura até o próximo ";"
+                const almoxarifadoMatch = rowStr.match(/Almoxarifado\s*:\s*;\s*([^;]+)/i);
+                const almReq = almoxarifadoMatch ? almoxarifadoMatch[1].trim() : '';
+                if (almReq) {
+                    requisicaoAtual.almoxarifado_requisicao = almReq;
+                    console.log(`[DEBUG] Almoxarifado capturado: "${almReq}"`);
+                }
+                else {
+                    console.log(`[DEBUG] Almoxarifado não encontrado na linha`);
+                }
+                continue;
+            }
+            // Numero da requisicao
+            const numIdx = compact.findIndex(c => /requisi[cç][aã]o?/i.test(c));
+            if (numIdx >= 0) {
+                const num = compact[numIdx + 1] ?? compact.slice(numIdx + 1).join(' ');
+                const parsed = parseInt((num ?? '').toString().replace(/[^0-9]/g, ''), 10);
+                if (!isNaN(parsed)) {
+                    requisicaoAtual.numero_requisicao = parsed;
+                    console.log(`[DEBUG] Número da requisição: ${parsed}`);
+                }
+                continue;
+            }
+            // Data/Hora - usa a data global do arquivo
+            const dateMatch = rowStr.match(/(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2})/);
+            if (dateMatch && dateMatch[1]) {
+                requisicaoAtual.data_requisicao = parseDate(dateMatch[1].trim()) ?? new Date();
+                console.log(`[DEBUG] Data da requisição (com hora): ${requisicaoAtual.data_requisicao}`);
+                continue;
+            }
+            else if (!requisicaoAtual.data_requisicao && dataGlobalArquivo) {
+                // Se não encontrar data com hora, usa a data global do arquivo
+                requisicaoAtual.data_requisicao = dataGlobalArquivo;
+                console.log(`[DEBUG] Data da requisição (usando data global): ${dataGlobalArquivo}`);
+                continue;
+            }
+            // Item
+            const item = tryParseItemFromRow(row);
+            if (item && requisicaoAtual.itens) {
+                requisicaoAtual.itens.push({
+                    endereco_item_requisicao: item.endereco ?? '',
+                    quantidade_solicitada_item_requisicao: item.quantidade,
+                    unidade_material_item_requisicao: item.unidade,
+                    descricao_material_item_requisicao: item.descricao,
+                });
+                continue;
+            }
+        }
+        if (requisicaoAtual && requisicaoAtual.numero_requisicao) {
+            console.log(`[DEBUG] Requisição final: #${requisicaoAtual.numero_requisicao}, Almoxarifado: "${requisicaoAtual.almoxarifado_requisicao}"`);
             requisicoesProcessadas.push(requisicaoAtual);
         }
+        // Verifica se as requisições já existem no banco
+        const numerosRequisicoes = requisicoesProcessadas
+            .map(r => r.numero_requisicao)
+            .filter((n) => typeof n === 'number');
+        const requisicoesExistentes = await prisma_1.prisma.requisicao.findMany({
+            where: { numero_requisicao: { in: numerosRequisicoes } },
+            select: { numero_requisicao: true },
+        });
+        const existentesSet = new Set(requisicoesExistentes.map(e => e.numero_requisicao));
+        const requisicoesNovas = requisicoesProcessadas.filter(r => !existentesSet.has(r.numero_requisicao));
+        // Se todas as requisições já existem, retorna erro
+        if (requisicoesNovas.length === 0) {
+            const numerosExistentes = Array.from(existentesSet).join(', ');
+            console.log(`[DEBUG] Todas as requisições já foram importadas: ${numerosExistentes}`);
+            res.status(400).json({
+                message: `Erro: As requisições de número(s) ${numerosExistentes} já foram importadas anteriormente. Nenhuma requisição foi adicionada.`
+            });
+            return;
+        }
+        // Se algumas requisições já existem, avisa quais foram puladas
+        if (requisicoesExistentes.length > 0) {
+            const numerosExistentes = Array.from(existentesSet).join(', ');
+            console.log(`[DEBUG] ${requisicoesExistentes.length} requisição(ões) já existente(s): ${numerosExistentes}`);
+        }
         await prisma_1.prisma.$transaction(async (tx) => {
-            for (const req of requisicoesProcessadas) {
+            for (const req of requisicoesNovas) {
+                // Data de cadastro com hora de São Paulo (UTC-3)
+                const dataCadastro = new Date();
+                dataCadastro.setHours(dataCadastro.getHours() - 3);
                 await tx.requisicao.create({
                     data: {
                         numero_requisicao: req.numero_requisicao,
                         requisitante_requisicao: req.requisitante_requisicao,
+                        almoxarifado_requisicao: req.almoxarifado_requisicao,
                         data_requisicao: req.data_requisicao,
+                        data_cadastro_requisicao: dataCadastro,
                         id_usuario: userId,
                         id_situacao_requisicao: 1,
                         prioridade_requisicao: false,
@@ -78,7 +192,10 @@ const importFromTxt = async (req, res) => {
                 });
             }
         });
-        res.status(201).json({ message: `Importação concluída! ${requisicoesProcessadas.length} requisições processadas.` });
+        const mensagem = requisicoesExistentes.length > 0
+            ? `Importação parcial concluída! ${requisicoesNovas.length} requisição(ões) nova(s) processada(s). ${requisicoesExistentes.length} requisição(ões) já existiam e foram puladas.`
+            : `Importação concluída! ${requisicoesNovas.length} requisição(ões) processada(s).`;
+        res.status(201).json({ message: mensagem });
     }
     catch (error) {
         console.error("Erro na importação via API:", error);
