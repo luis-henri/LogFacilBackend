@@ -16,17 +16,22 @@ interface ParsedRequisicao {
   }[];
 }
 
-// Função auxiliar para converter data no formato DD/MM/AAAA HH:mm:ss para um objeto Date
+// Função auxiliar para converter data no formato DD/MM/AAAA para um objeto Date (UTC 00:00:00)
 function parseDate(dateString: string): Date | null {
   try {
-    const [datePart, timePart] = dateString.split(' ');
-    const [day, month, year] = datePart.split('/');
-    if (isNaN(parseInt(day)) || isNaN(parseInt(month)) || isNaN(parseInt(year))) {
+    const [day, month, year] = dateString.trim().split('/');
+    
+    const dayNum = parseInt(day, 10);
+    const monthNum = parseInt(month, 10);
+    const yearNum = parseInt(year, 10);
+    
+    if (isNaN(dayNum) || isNaN(monthNum) || isNaN(yearNum)) {
       return null;
     }
-    const date = new Date(`${year}-${month}-${day}T${timePart}`);
-    // Ajusta para timezone de São Paulo (UTC-3)
-    date.setHours(date.getHours() - 3);
+    
+    // Cria a data em UTC (00:00:00 UTC) - apenas a data do arquivo, sem hora do computador
+    const date = new Date(Date.UTC(yearNum, monthNum - 1, dayNum, 0, 0, 0, 0));
+    
     return date;
   } catch (e) {
     console.warn(`Formato de data inválido encontrado: ${dateString}`);
@@ -61,21 +66,6 @@ export const importFromTxt = async (req: Request, res: Response): Promise<void> 
 
         const requisicoesProcessadas: ParsedRequisicao[] = [];
         let requisicaoAtual: Partial<ParsedRequisicao> = { itens: [] };
-        
-        // Captura a data global do arquivo (primeira ocorrência com hora completa)
-        let dataGlobalArquivo: Date | null = null;
-        for (const r of records) {
-            const rowStr = r.join(';');
-            const dateMatch = rowStr.match(/(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2})/);
-            if (dateMatch && dateMatch[1]) {
-                dataGlobalArquivo = parseDate(dateMatch[1].trim());
-                console.log(`[DEBUG] Data global do arquivo capturada: ${dataGlobalArquivo}`);
-                break;
-            }
-        }
-        if (!dataGlobalArquivo) {
-            dataGlobalArquivo = new Date(); // Fallback se não encontrar
-        }
 
         function compactRow(row: string[]): string[] {
             return row.map(c => (c ?? '').toString()).map(s => s.trim()).filter(s => s.length > 0);
@@ -137,19 +127,18 @@ export const importFromTxt = async (req: Request, res: Response): Promise<void> 
                     requisicaoAtual.numero_requisicao = parsed;
                     console.log(`[DEBUG] Número da requisição: ${parsed}`);
                 }
-                continue;
-            }
-
-            // Data/Hora - usa a data global do arquivo
-            const dateMatch = rowStr.match(/(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2})/);
-            if (dateMatch && dateMatch[1]) {
-                requisicaoAtual.data_requisicao = parseDate(dateMatch[1].trim()) ?? new Date();
-                console.log(`[DEBUG] Data da requisição (com hora): ${requisicaoAtual.data_requisicao}`);
-                continue;
-            } else if (!requisicaoAtual.data_requisicao && dataGlobalArquivo) {
-                // Se não encontrar data com hora, usa a data global do arquivo
-                requisicaoAtual.data_requisicao = dataGlobalArquivo;
-                console.log(`[DEBUG] Data da requisição (usando data global): ${dataGlobalArquivo}`);
+                
+                // Tenta capturar a data na mesma linha (formato: Data:;;15/04/2025)
+                const dateMatch = rowStr.match(/Data\s*:\s*[;]*\s*(\d{2}\/\d{2}\/\d{4})/i);
+                if (dateMatch && dateMatch[1]) {
+                    const dataParsed = parseDate(dateMatch[1].trim());
+                    if (dataParsed) {
+                        requisicaoAtual.data_requisicao = dataParsed;
+                        console.log(`[DEBUG] Data da requisição capturada: "${dateMatch[1]}" -> ${requisicaoAtual.data_requisicao}`);
+                    } else {
+                        console.log(`[DEBUG] Falha ao parsear data: "${dateMatch[1]}"`);
+                    }
+                }
                 continue;
             }
 
