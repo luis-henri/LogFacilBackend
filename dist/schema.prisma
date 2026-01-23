@@ -138,10 +138,7 @@ model Requisicao {
   id_usuario              Int
   id_situacao_requisicao  Int
   id_tipo_envio_requisicao Int?
-  
-  // ===== ALTERAÇÃO AQUI =====
-  // O tipo foi alterado de @db.Date para @db.Timestamp(6) para guardar data e hora.
-  data_requisicao         DateTime @default(now()) @db.Timestamp(6)
+  data_requisicao         DateTime @db.Date
   
   prioridade_requisicao   Boolean? @default(false)
   observacao_requisicao   String?
